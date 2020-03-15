@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/jackdanger/collectlinks"
 )
+
+var visited = make(map[string]bool)
 
 func main() {
 	flag.Parse()
@@ -18,12 +21,20 @@ func main() {
 		os.Exit(1)
 	} else {
 		fmt.Printf("Passed URL: %v \n", args)
-		retrieve(args[0])
 	}
+	queue := make(chan string)
+	go func() {
 
+		queue <- args[0]
+	}()
+	for url := range queue {
+		enqueue(url, queue)
+	}
 }
 
-func retrieve(url string) {
+func enqueue(url string, queue chan string) {
+	fmt.Printf("Processing link: %v \n", url)
+	visited[url] = true
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
@@ -41,8 +52,28 @@ func retrieve(url string) {
 	defer resp.Body.Close()
 
 	links := collectlinks.All(resp.Body)
-
 	for _, link := range links {
-		fmt.Println(link)
+		absolute := fixUrl(link, url)
+		if absolute != "" {
+			if !visited[absolute] {
+				go func() {
+					queue <- absolute
+				}()
+			}
+
+		}
 	}
+}
+
+func fixUrl(href, base string) string {
+	uri, err := url.Parse(href)
+	if err != nil {
+		return ""
+	}
+	baseUrl, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	uri = baseUrl.ResolveReference(uri)
+	return uri.String()
 }
