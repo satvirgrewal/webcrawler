@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
+
+	"github.com/jackdanger/collectlinks"
 )
 
 func main() {
@@ -22,13 +24,25 @@ func main() {
 }
 
 func retrieve(url string) {
-	resp, err := http.Get(url)
-	if err != nil {
-		os.Exit(1)
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		os.Exit(1)
+
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
 	}
-	fmt.Println(string(body))
+
+	client := http.Client{Transport: transport}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	links := collectlinks.All(resp.Body)
+
+	for _, link := range links {
+		fmt.Println(link)
+	}
 }
